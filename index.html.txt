@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard: Sociología de la Educación</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de D3.js para visualizaciones -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- Carga de D3-Sankey (requerido para el diagrama de flujo) -->
+    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <style>
+        /* Configuración de fuente y estilos base */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Gris claro de fondo */
+        }
+        .tab-button.active {
+            border-bottom: 3px solid #10b981; /* color emerald para la pestaña activa */
+            color: #10b981;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+        }
+        .bar-label {
+            font-weight: 600;
+            fill: #4b5563;
+        }
+        .label-value {
+             font-size: 0.875rem; /* text-sm */
+             font-weight: 600; /* font-semibold */
+             fill: #1f2937; /* gray-800 */
+        }
+        .line-dot {
+            transition: r 0.1s ease-out;
+        }
+        .line-dot:hover {
+            r: 6px;
+        }
+        .scatter-dot {
+            transition: opacity 0.2s;
+            cursor: pointer;
+        }
+        /* Estilos específicos para Box Plot */
+        .box {
+            fill: #a855f7; /* Violeta */
+            stroke: #5b21b6; /* Violeta oscuro */
+            stroke-width: 2;
+            opacity: 0.7;
+        }
+        .median {
+            stroke: #fcd34d; /* Amarillo para la mediana */
+            stroke-width: 3;
+        }
+        .whisker {
+            stroke: #4b5563;
+            stroke-width: 1.5;
+            stroke-dasharray: 2,2;
+        }
+        /* Estilos específicos para Sankey */
+        .sankey-node rect {
+            fill-opacity: 0.9;
+            shape-rendering: crispEdges;
+            transition: opacity 0.3s;
+        }
+        .sankey-link {
+            fill: none;
+            stroke: #000;
+            stroke-opacity: 0.2;
+            transition: stroke-opacity 0.3s, opacity 0.3s;
+        }
+        .sankey-link:hover {
+            stroke-opacity: 0.5;
+        }
+        .sankey-node text {
+            pointer-events: none;
+            font-weight: 600;
+            fill: #1f2937;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Encabezado y Título -->
+    <header class="bg-white shadow-md p-4 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center">
+            <h1 class="text-3xl font-bold text-gray-800">Dashboard: Equidad Educativa</h1>
+            <p class="text-sm text-gray-500 mt-2 sm:mt-0">Análisis Sociológico de Indicadores Clave</p>
+        </div>
+    </header>
+
+    <!-- Navegación por Secciones (Pestañas) -->
+    <nav class="bg-gray-50 shadow-inner">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-4 overflow-x-auto whitespace-nowrap">
+                <button id="tab-1" class="tab-button py-3 px-4 text-sm font-medium text-gray-700 hover:text-emerald-500 transition duration-150 ease-in-out" onclick="showSection(1)">
+                    1. Panorama General
+                </button>
+                <button id="tab-2" class="tab-button py-3 px-4 text-sm font-medium text-gray-700 hover:text-emerald-500 transition duration-150 ease-in-out" onclick="showSection(2)">
+                    2. Equidad y Rendimiento
+                </button>
+                <button id="tab-3" class="tab-button py-3 px-4 text-sm font-medium text-gray-700 hover:text-emerald-500 transition duration-150 ease-in-out" onclick="showSection(3)">
+                    3. Contexto y Recursos
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contenido Principal del Dashboard -->
+    <main class="flex-grow p-4 sm:p-6 lg:p-8">
+        <div class="max-w-7xl mx-auto">
+
+            <!-- Sección 1: Panorama General (Por defecto oculta) -->
+            <section id="section-1" class="hidden tab-content">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Tarjetas de Resumen (Métricas Clave) -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500">
+                        <p class="text-sm text-gray-500">Total de Alumnos (Secundaria)</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-1">2.5M</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500">
+                        <p class="text-sm text-gray-500">Gasto Público per Cápita (USD)</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-1">$1,850</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500">
+                        <p class="text-sm text-gray-500">Tasa de Transición (Primaria a Secundaria)</p>
+                        <p class="text-3xl font-bold text-gray-900 mt-1">97.2%</p>
+                    </div>
+                </div>
+                <!-- Visualización TEN -->
+                <div class="mt-8 bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Tasa de Escolarización Neta (TEN) por Nivel (%)</h2>
+                    <div id="chart-ten" class="chart-container h-[350px] w-full">
+                        <svg id="ten-svg" class="w-full h-full"></svg>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-4">Fuente: Datos simulados (Mock Data 2024)</p>
+                </div>
+            </section>
+
+            <!-- Sección 2: Equidad y Rendimiento (Visible por defecto) -->
+            <section id="section-2" class="tab-content">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Equidad y Desigualdad en los Resultados</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                    <!-- Visualización 1: Brecha de Rendimiento Académico (Gap Chart) -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 flex justify-between items-center">
+                            Brecha de Rendimiento Académico (Puntaje Matemáticas)
+                            <span id="gap-value" class="text-3xl font-extrabold text-red-600 bg-red-100 px-3 py-1 rounded-full"></span>
+                        </h3>
+                        <p class="text-sm text-gray-500 mb-4">Diferencia entre estudiantes de NSE Alto (Q5) y NSE Bajo (Q1) en pruebas estandarizadas.</p>
+                        <div id="gap-chart" class="chart-container h-[250px] w-full">
+                            <!-- SVG del gráfico D3 se inyectará aquí -->
+                            <svg id="gap-svg" class="w-full h-full"></svg>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-4">Fuente: Datos simulados (Mock Data 2024)</p>
+                    </div>
+
+                    <!-- Visualización 2: Tasa de Abandono (Line Chart) -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Tasa de Abandono Temporal por NSE (2020-2024)</h3>
+                        <div id="dropout-chart" class="chart-container h-[250px] w-full">
+                            <svg id="dropout-svg" class="w-full h-full"></svg>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-4">Fuente: Datos simulados (Mock Data 2024)</p>
+                    </div>
+                </div>
+
+                <!-- Fila inferior: Box Plots y Sankey -->
+                <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Box Plot (Distribución de Puntajes por Región) -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Distribución de Puntajes por Región (Diagrama de Caja y Bigotes)</h3>
+                        <div id="boxplot-chart" class="chart-container h-[450px]">
+                             <!-- SVG del Box Plot se inyectará aquí -->
+                             <svg id="boxplot-svg" class="w-full h-full"></svg>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-4">Fuente: Datos simulados (Mock Data 2024)</p>
+                    </div>
+                    
+                    <!-- Sankey Chart (Transición Educativa Parental) -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg"> 
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Acceso a Superior según Nivel Educativo Parental (Diagrama de Sankey)</h3>
+                        <div id="sankey-chart" class="chart-container h-[450px]">
+                            <!-- SVG del Sankey se inyectará aquí -->
+                            <svg id="sankey-svg" class="w-full h-full"></svg>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-4">El ancho de los flujos representa la proporción de estudiantes.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección 3: Contexto y Recursos (Por defecto oculta) -->
+            <section id="section-3" class="hidden tab-content">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Contexto, Recursos e Inversión</h2>
+                <div class="grid grid-cols-1 gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Correlación Gasto Público per Cápita vs. Puntaje Promedio</h3>
+                        <div id="scatter-chart" class="chart-container h-[400px] w-full">
+                            <svg id="scatter-svg" class="w-full h-full"></svg>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-4">Fuente: Datos simulados (Mock Data 2024, comparativa jurisdiccional)</p>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+    
+    <!-- Tooltip (necesario para la gráfica de dispersión, abandono y Sankey) -->
+    <div id="tooltip" class="absolute opacity-0 bg-gray-800 text-white text-xs p-2 rounded-md shadow-lg pointer-events-none transition duration-150 ease-in-out"></div>
+
+
+    <!-- Script de Datos, Lógica de Tabs y Visualización D3 -->
+    <script>
+        // --- 1. Datos Mock (Basado en el Plan) ---
+        const datosBrecha = [
+            { "indicador": "NSE Alto (Q5)", "valor": 525, "color": "#10b981" }, // Emerald 500
+            { "indicador": "NSE Bajo (Q1)", "valor": 410, "color": "#ef4444" }  // Red 500
+        ];
+        
+        const datosTEN = [
+            { nivel: "Inicial (3-5)", ten: 78.5, color: "#3b82f6" }, // Blue
+            { nivel: "Primaria (6-11)", ten: 98.1, color: "#10b981" }, // Emerald
+            { nivel: "Secundaria (12-17)", ten: 89.4, color: "#f97316" }, // Orange
+            { nivel: "Superior (18-24)", ten: 34.2, color: "#8b5cf6" } // Violet
+        ];
+
+        const datosAbandono = [
+            { anio: 2020, alto: 1.5, medio: 4.8, bajo: 10.2 },
+            { anio: 2021, alto: 1.8, medio: 5.5, bajo: 12.5 }, // Aumento post-pandemia
+            { anio: 2022, alto: 1.6, medio: 5.1, bajo: 11.5 },
+            { anio: 2023, alto: 1.4, medio: 4.9, bajo: 10.8 },
+            { anio: 2024, alto: 1.3, medio: 4.7, bajo: 10.5 }
+        ];
+
+        const datosCorrelacion = [
+            { region: "Capital", gasto: 2800, puntaje: 530, poblacion: 300000, color: "#3b82f6" }, 
+            { region: "Sur A", gasto: 2500, puntaje: 505, poblacion: 150000, color: "#a855f7" },
+            { region: "Centro B", gasto: 2000, puntaje: 490, poblacion: 500000, color: "#10b981" },
+            { region: "Norte C", gasto: 1500, puntaje: 440, poblacion: 800000, color: "#ef4444" },
+            { region: "Litoral D", gasto: 1900, puntaje: 470, poblacion: 450000, color: "#f97316" },
+            { region: "Cuyo E", gasto: 2200, puntaje: 500, poblacion: 200000, color: "#3b82f6" },
+            { region: "Patagonia", gasto: 2600, puntaje: 520, poblacion: 100000, color: "#a855f7" },
+            { region: "Noreste F", gasto: 1400, puntaje: 430, poblacion: 650000, color: "#ef4444" },
+        ];
+        
+        const datosDistribucion = {
+            "Capital": Array.from({ length: 1000 }, () => Math.round(d3.randomNormal(550, 40)())), 
+            "Sur A": Array.from({ length: 1000 }, () => Math.round(d3.randomNormal(500, 50)())),  
+            "Centro B": Array.from({ length: 1000 }, () => Math.round(d3.randomNormal(470, 60)())),
+            "Noreste F": Array.from({ length: 1000 }, () => Math.round(d3.randomNormal(420, 70)())), 
+        };
+        Object.keys(datosDistribucion).forEach(region => {
+            datosDistribucion[region] = datosDistribucion[region].map(p => Math.max(300, Math.min(700, p)));
+        });
+
+        // NUEVOS DATOS: Para Diagrama de Sankey (flujo educativo según origen parental)
+        const datosSankey = {
+            nodes: [
+                // Origen Parental (Nivel 0)
+                { name: "Padres: Primaria Incompleta", color: "#ef4444" },
+                { name: "Padres: Secundaria Completa", color: "#f97316" },
+                { name: "Padres: Superior Completa", color: "#10b981" },
+                // Resultado del Estudiante (Nivel 1)
+                { name: "Estudiante: Sin Superior", color: "#4b5563" },
+                { name: "Estudiante: Acceso a Superior", color: "#3b82f6" }
+            ],
+            // Flujos (source, target, value = número de estudiantes en miles)
+            links: [
+                // Padres Primaria Incompleta
+                { source: 0, target: 3, value: 350 }, // Sin Superior (Flujo grande)
+                { source: 0, target: 4, value: 50 },  // Acceso a Superior (Flujo pequeño)
+                // Padres Secundaria Completa
+                { source: 1, target: 3, value: 200 }, // Sin Superior (Flujo medio)
+                { source: 1, target: 4, value: 150 }, // Acceso a Superior (Flujo medio)
+                // Padres Superior Completa
+                { source: 2, target: 3, value: 50 },  // Sin Superior (Flujo muy pequeño)
+                { source: 2, target: 4, value: 400 }  // Acceso a Superior (Flujo muy grande)
+            ]
+        };
+        
+        const nodeColors = d3.scaleOrdinal()
+            .domain(datosSankey.nodes.map(d => d.name))
+            .range(datosSankey.nodes.map(d => d.color));
+
+
+        // --- 2. Lógica de Pestañas (Tabs) ---
+        function showSection(sectionNumber) {
+            const sections = document.querySelectorAll('.tab-content');
+            const buttons = document.querySelectorAll('.tab-button');
+
+            sections.forEach((section, index) => {
+                const isActive = (index + 1) === sectionNumber;
+                section.classList.toggle('hidden', !isActive);
+                buttons[index].classList.toggle('active', isActive);
+            });
+            
+            // Dibujar gráficos al activar la sección
+            if (sectionNumber === 1) {
+                drawTENChart();
+            }
+            if (sectionNumber === 2) {
+                drawGapChart();
+                drawDropoutChart();
+                drawBoxPlot();
+                drawSankeyChart(); // Llama al nuevo Sankey
+            }
+            if (sectionNumber === 3) {
+                drawScatterChart();
+            }
+        }
+
+        // Inicializar mostrando la Sección 2 (Equidad y Rendimiento)
+        document.addEventListener('DOMContentLoaded', () => {
+            setupTooltip();
+            showSection(2); 
+        });
+        
+        // Función para configurar el Tooltip global
+        function setupTooltip() {
+             if (!document.getElementById("tooltip")) {
+                d3.select("body").append("div")
+                    .attr("id", "tooltip")
+                    .style("opacity", 0)
+                    .style("position", "absolute")
+                    .style("background", "rgba(0, 0, 0, 0.8)")
+                    .style("color", "white")
+                    .style("padding", "6px")
+                    .style("border-radius", "4px")
+                    .style("pointer-events", "none");
+            }
+        }
+
+        // Función debounce para limitar la frecuencia de redibujado en resize
+        function debounce(func, timeout = 300) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => { func.apply(this, args); }, timeout);
+            };
+        }
+        
+        // Función de utilidad para calcular estadísticos del Box Plot
+        function calculateBoxPlotStats(data) {
+            const sortedData = data.sort(d3.ascending);
+            const q1 = d3.quantile(sortedData, 0.25);
+            const median = d3.quantile(sortedData, 0.5);
+            const q3 = d3.quantile(sortedData, 0.75);
+            const iqr = q3 - q1; // Interquartile Range
+            
+            const min = d3.min(sortedData.filter(d => d >= q1 - 1.5 * iqr));
+            const max = d3.max(sortedData.filter(d => d <= q3 + 1.5 * iqr));
+            
+            return { min: min || d3.min(sortedData), q1, median, q3, max: max || d3.max(sortedData) };
+        }
+
+        // --- 3. Visualización D3: Diagrama de Caja y Bigotes (Box Plot) ---
+        function drawBoxPlot() {
+            const container = document.getElementById('boxplot-chart');
+            const svgElement = document.getElementById('boxplot-svg');
+            
+            d3.select(svgElement).selectAll('*').remove();
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            const margin = { top: 30, right: 30, bottom: 80, left: 60 },
+                  width = containerWidth - margin.left - margin.right,
+                  height = containerHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(svgElement)
+                .attr("width", containerWidth)
+                .attr("height", containerHeight)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            const regions = Object.keys(datosDistribucion);
+            
+            const boxPlotData = regions.map(region => ({
+                region: region,
+                stats: calculateBoxPlotStats(datosDistribucion[region])
+            }));
+            
+            const y = d3.scaleLinear()
+                .domain([300, 700]) 
+                .range([height, 0]);
+
+            svg.append("g")
+                .call(d3.axisLeft(y).ticks(8));
+
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 10)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("Puntaje Académico (Estandarizado)");
+                
+            const x = d3.scaleBand()
+                .domain(regions)
+                .range([0, width])
+                .paddingInner(1)
+                .paddingOuter(0.5);
+                
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "translate(-10,0)rotate(-45)") 
+                .style("text-anchor", "end");
+            
+            const boxWidth = 50; 
+            
+            const boxes = svg.selectAll(".box-group")
+                .data(boxPlotData)
+                .enter().append("g")
+                .attr("transform", d => `translate(${x(d.region)}, 0)`)
+                .attr("class", "box-group");
+            
+            // Bigote vertical
+            boxes.append("line")
+                .attr("class", "whisker")
+                .attr("x1", 0)
+                .attr("x2", 0)
+                .attr("y1", d => y(d.stats.min))
+                .attr("y2", d => y(d.stats.max)); 
+                
+            // Tapas de los Bigotes
+            boxes.append("line")
+                .attr("class", "whisker")
+                .attr("x1", -boxWidth / 2)
+                .attr("x2", boxWidth / 2)
+                .attr("y1", d => y(d.stats.min))
+                .attr("y2", d => y(d.stats.min)); 
+
+            boxes.append("line")
+                .attr("class", "whisker")
+                .attr("x1", -boxWidth / 2)
+                .attr("x2", boxWidth / 2)
+                .attr("y1", d => y(d.stats.max))
+                .attr("y2", d => y(d.stats.max)); 
+                
+            // Caja (IQR: Q1 a Q3)
+            boxes.append("rect")
+                .attr("class", "box")
+                .attr("x", -boxWidth / 2)
+                .attr("y", d => y(d.stats.q3)) 
+                .attr("width", boxWidth)
+                .attr("height", d => y(d.stats.q1) - y(d.stats.q3)) 
+                // Tooltip
+                .on("mouseover", (event, d) => {
+                    const stats = d.stats;
+                    d3.select("#tooltip")
+                        .style("opacity", 1)
+                        .html(`
+                            <strong>Región: ${d.region}</strong><br>
+                            Mediana (P50): ${stats.median}<br>
+                            Q3 (P75): ${stats.q3}<br>
+                            Q1 (P25): ${stats.q1}<br>
+                            Rango Intercuartil: ${(stats.q3 - stats.q1).toFixed(1)}<br>
+                            Rango Total: ${stats.max - stats.min}
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    d3.select(event.currentTarget).attr("opacity", 1).attr("stroke-width", 3);
+                })
+                .on("mouseout", (event) => {
+                    d3.select("#tooltip").style("opacity", 0);
+                    d3.select(event.currentTarget).attr("opacity", 0.7).attr("stroke-width", 2);
+                });
+                
+            // Mediana (Línea)
+            boxes.append("line")
+                .attr("class", "median")
+                .attr("x1", -boxWidth / 2)
+                .attr("x2", boxWidth / 2)
+                .attr("y1", d => y(d.stats.median))
+                .attr("y2", d => y(d.stats.median));
+
+
+            window.removeEventListener('resize', window.boxPlotResizeHandler);
+            window.boxPlotResizeHandler = debounce(drawBoxPlot, 250);
+            window.addEventListener('resize', window.boxPlotResizeHandler);
+        }
+        
+        // --- 4. Visualización D3: Diagrama de Sankey ---
+        function drawSankeyChart() {
+            const container = document.getElementById('sankey-chart');
+            const svgElement = document.getElementById('sankey-svg');
+            
+            d3.select(svgElement).selectAll('*').remove();
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            const margin = { top: 20, right: 30, bottom: 20, left: 30 },
+                  width = containerWidth - margin.left - margin.right,
+                  height = containerHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(svgElement)
+                .attr("width", containerWidth)
+                .attr("height", containerHeight)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Inicializar el generador de Sankey
+            const sankey = d3.sankey()
+                .nodeWidth(15) // Ancho de los nodos
+                .nodePadding(20) // Espacio entre nodos
+                .extent([[1, 1], [width - 1, height - 5]]); // Definir el área de dibujo
+
+            // Clonar los datos para que Sankey pueda modificarlos (añade x, y, etc.)
+            const graph = JSON.parse(JSON.stringify(datosSankey)); 
+            
+            // Calcular la disposición del Sankey
+            sankey(graph); 
+
+            // Escala de colores para los flujos (links)
+            const colorLink = (d) => {
+                // Usamos el color del nodo fuente
+                return nodeColors(d.source.name);
+            };
+
+            // Dibujar los enlaces (Links)
+            const link = svg.append("g")
+                .attr("class", "sankey-links")
+                .selectAll(".sankey-link")
+                .data(graph.links)
+                .join("path")
+                .attr("class", "sankey-link")
+                .attr("d", d3.sankeyLinkHorizontal())
+                .attr("stroke-width", d => Math.max(1, d.width))
+                .style("stroke", d => d.color = colorLink(d))
+                .on("mouseover", (event, d) => {
+                    const percentage = (d.value / d.source.value) * 100;
+                    d3.select("#tooltip")
+                        .style("opacity", 1)
+                        .html(`
+                            <strong>Flujo:</strong> ${d.source.name} → ${d.target.name}<br>
+                            <strong>Cantidad:</strong> ${d.value.toFixed(0)} mil estudiantes<br>
+                            <strong>% de la fuente:</strong> ${percentage.toFixed(1)}%
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    d3.select(event.currentTarget).style("stroke-opacity", 0.7);
+                })
+                .on("mouseout", (event) => {
+                    d3.select("#tooltip").style("opacity", 0);
+                    d3.select(event.currentTarget).style("stroke-opacity", 0.2);
+                });
+                
+            // Dibujar los nodos (Nodes)
+            const node = svg.append("g")
+                .attr("class", "sankey-nodes")
+                .selectAll(".sankey-node")
+                .data(graph.nodes)
+                .join("g")
+                .attr("class", "sankey-node")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+
+            // Rectángulo del nodo
+            node.append("rect")
+                .attr("height", d => d.height)
+                .attr("width", sankey.nodeWidth())
+                .style("fill", d => nodeColors(d.name))
+                .style("stroke", d => d3.color(nodeColors(d.name)).darker(0.5))
+                .on("mouseover", (event, d) => {
+                    const totalValue = d.sourceLinks.reduce((sum, l) => sum + l.value, 0) + 
+                                       d.targetLinks.reduce((sum, l) => sum + l.value, 0);
+                    d3.select("#tooltip")
+                        .style("opacity", 1)
+                        .html(`
+                            <strong>${d.name}</strong><br>
+                            Flujo Total: ${d.value.toFixed(0)} mil estudiantes
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    d3.select(event.currentTarget).style("fill-opacity", 1);
+                })
+                .on("mouseout", (event) => {
+                    d3.select("#tooltip").style("opacity", 0);
+                    d3.select(event.currentTarget).style("fill-opacity", 0.9);
+                });
+
+            // Etiqueta del nodo
+            node.append("text")
+                .attr("x", d => d.x < width / 2 ? 6 + sankey.nodeWidth() : -6)
+                .attr("y", d => d.height / 2)
+                .attr("dy", "0.35em")
+                .attr("text-anchor", d => d.x < width / 2 ? "start" : "end")
+                .text(d => d.name)
+                .filter(d => d.x < width / 2) // Ajuste de texto para el lado izquierdo
+                .attr("x", 6 + sankey.nodeWidth()); 
+                
+            node.append("text") // Ajuste de texto para el lado derecho (los resultados)
+                .attr("x", d => d.x < width / 2 ? 6 + sankey.nodeWidth() : -6)
+                .attr("y", d => d.height / 2 + 15) // Mover el valor debajo del nombre
+                .attr("dy", "0.35em")
+                .attr("text-anchor", d => d.x < width / 2 ? "start" : "end")
+                .style("font-size", "11px")
+                .style("font-weight", "400")
+                .style("fill", "#6b7280") // Gris oscuro
+                .text(d => `${d.value.toFixed(0)}k`);
+
+
+            window.removeEventListener('resize', window.sankeyChartResizeHandler);
+            window.sankeyChartResizeHandler = debounce(drawSankeyChart, 250);
+            window.addEventListener('resize', window.sankeyChartResizeHandler);
+        }
+        
+        // --- Funciones para gráficos existentes (dejadas intactas para completitud) ---
+        function drawGapChart() {
+            const container = document.getElementById('gap-chart');
+            const svgElement = document.getElementById('gap-svg');
+            
+            d3.select(svgElement).selectAll('*').remove();
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            const margin = { top: 20, right: 30, bottom: 40, left: 100 },
+                  width = containerWidth - margin.left - margin.right,
+                  height = containerHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(svgElement)
+                .attr("width", containerWidth)
+                .attr("height", containerHeight)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleLinear()
+                .domain([350, 600]) 
+                .range([0, width]);
+
+            const y = d3.scaleBand()
+                .domain(datosBrecha.map(d => d.indicador))
+                .range([0, height])
+                .padding(0.6);
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).ticks(5))
+                .selectAll("text")
+                .style("font-size", "12px");
+
+            svg.selectAll(".bar")
+                .data(datosBrecha)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("y", d => y(d.indicador))
+                .attr("x", d => x(350)) 
+                .attr("height", y.bandwidth())
+                .attr("fill", d => d.color)
+                .attr("rx", 4) 
+                .attr("ry", 4)
+                .transition()
+                .duration(800)
+                .attr("width", d => x(d.valor) - x(350));
+
+            svg.selectAll(".label-group")
+                .data(datosBrecha)
+                .enter().append("text")
+                .attr("class", "bar-label")
+                .attr("x", 0) 
+                .attr("y", d => y(d.indicador) + y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("text-anchor", "end")
+                .text(d => d.indicador)
+                .attr("transform", `translate(-10, 0)`);
+
+
+            svg.selectAll(".label-value")
+                .data(datosBrecha)
+                .enter().append("text")
+                .attr("class", "label-value")
+                .attr("x", d => x(d.valor))
+                .attr("y", d => y(d.indicador) + y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .attr("dx", 5) 
+                .text(d => d.valor.toFixed(0));
+
+            const alto = datosBrecha.find(d => d.indicador.includes("Alto")).valor;
+            const bajo = datosBrecha.find(d => d.indicador.includes("Bajo")).valor;
+            const gap = alto - bajo;
+
+            document.getElementById('gap-value').textContent = `${gap.toFixed(0)} pts`;
+            
+            window.removeEventListener('resize', window.gapChartResizeHandler);
+            window.gapChartResizeHandler = debounce(drawGapChart, 250);
+            window.addEventListener('resize', window.gapChartResizeHandler);
+        }
+        
+        function drawTENChart() {
+            const container = document.getElementById('chart-ten');
+            const svgElement = document.getElementById('ten-svg');
+            
+            d3.select(svgElement).selectAll('*').remove();
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            const margin = { top: 20, right: 30, bottom: 40, left: 120 },
+                  width = containerWidth - margin.left - margin.right,
+                  height = containerHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(svgElement)
+                .attr("width", containerWidth)
+                .attr("height", containerHeight)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleLinear()
+                .domain([0, 100])
+                .range([0, width]);
+
+            const y = d3.scaleBand()
+                .domain(datosTEN.map(d => d.nivel))
+                .range([0, height])
+                .padding(0.3);
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickFormat(d => d + "%"))
+                .selectAll("text")
+                .style("font-size", "12px");
+                
+            svg.append("text")
+                .attr("transform", `translate(${width/2}, ${height + margin.bottom - 5})`)
+                .style("text-anchor", "middle")
+                .style("font-size", "12px")
+                .text("Tasa de Escolarización Neta (TEN)");
+
+            svg.selectAll(".ten-bar")
+                .data(datosTEN)
+                .enter().append("rect")
+                .attr("class", "ten-bar")
+                .attr("y", d => y(d.nivel))
+                .attr("x", 0) 
+                .attr("height", y.bandwidth())
+                .attr("fill", d => d.color)
+                .attr("rx", 4) 
+                .attr("ry", 4)
+                .transition()
+                .duration(800)
+                .attr("width", d => x(d.ten));
+
+            svg.selectAll(".ten-label-group")
+                .data(datosTEN)
+                .enter().append("text")
+                .attr("class", "bar-label")
+                .attr("x", 0) 
+                .attr("y", d => y(d.nivel) + y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("text-anchor", "end")
+                .text(d => d.nivel)
+                .attr("transform", `translate(-10, 0)`);
+
+
+            svg.selectAll(".ten-label-value")
+                .data(datosTEN)
+                .enter().append("text")
+                .attr("class", "label-value")
+                .attr("x", d => x(d.ten))
+                .attr("y", d => y(d.nivel) + y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .attr("dx", 5) 
+                .text(d => d.ten.toFixed(1) + "%");
+
+            window.removeEventListener('resize', window.tenChartResizeHandler);
+            window.tenChartResizeHandler = debounce(drawTENChart, 250);
+            window.addEventListener('resize', window.tenChartResizeHandler);
+        }
+
+        function drawDropoutChart() {
+            const container = document.getElementById('dropout-chart');
+            const svgElement = document.getElementById('dropout-svg');
+            
+            d3.select(svgElement).selectAll('*').remove();
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            const margin = { top: 20, right: 100, bottom: 40, left: 50 },
+                  width = containerWidth - margin.left - margin.right,
+                  height = containerHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(svgElement)
+                .attr("width", containerWidth)
+                .attr("height", containerHeight)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            const nseGroups = [
+                { key: "alto", label: "NSE Alto", color: "#10b981" },
+                { key: "medio", label: "NSE Medio", color: "#f97316" },
+                { key: "bajo", label: "NSE Bajo", color: "#ef4444" }
+            ];
+
+            const x = d3.scalePoint()
+                .domain(datosAbandono.map(d => d.anio))
+                .range([0, width])
+                .padding(0.5);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(datosAbandono, d => d.bajo) + 2])
+                .range([height, 0]);
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickFormat(d => d.toFixed(0)))
+                .selectAll("text")
+                .style("font-size", "12px");
+            
+            svg.append("g")
+                .call(d3.axisLeft(y).tickFormat(d => d + "%"));
+
+            const line = d3.line()
+                .x(d => x(d.anio))
+                .y(d => y(d.valor))
+                .curve(d3.curveMonotoneX);
+
+            nseGroups.forEach(group => {
+                const data = datosAbandono.map(d => ({
+                    anio: d.anio,
+                    valor: d[group.key]
+                }));
+
+                svg.append("path")
+                    .datum(data)
+                    .attr("fill", "none")
+                    .attr("stroke", group.color)
+                    .attr("stroke-width", 2.5)
+                    .attr("d", line);
+                
+                svg.selectAll(`.dot-${group.key}`)
+                    .data(data)
+                    .enter().append("circle")
+                    .attr("class", `line-dot dot-${group.key}`)
+                    .attr("cx", d => x(d.anio))
+                    .attr("cy", d => y(d.valor))
+                    .attr("r", 4)
+                    .attr("fill", group.color)
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 1.5)
+                    .on("mouseover", (event, d) => {
+                        const tooltip = d3.select("#tooltip");
+                        tooltip
+                            .style("opacity", 1)
+                            .html(`**${group.label}**<br>Tasa ${d.anio}: <strong>${d.valor.toFixed(1)}%</strong>`)
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", () => {
+                        d3.select("#tooltip").style("opacity", 0);
+                    });
+
+                svg.append("text")
+                    .attr("x", width + 10)
+                    .attr("y", y(data[data.length - 1].valor)) 
+                    .attr("dy", "0.35em")
+                    .style("font-size", "12px")
+                    .style("fill", group.color)
+                    .text(group.label);
+            });
+            
+            window.removeEventListener('resize', window.dropoutChartResizeHandler);
+            window.dropoutChartResizeHandler = debounce(drawDropoutChart, 250);
+            window.addEventListener('resize', window.dropoutChartResizeHandler);
+        }
+
+        function drawScatterChart() {
+            const container = document.getElementById('scatter-chart');
+            const svgElement = document.getElementById('scatter-svg');
+            
+            d3.select(svgElement).selectAll('*').remove();
+
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            const margin = { top: 20, right: 30, bottom: 60, left: 70 },
+                  width = containerWidth - margin.left - margin.right,
+                  height = containerHeight - margin.top - margin.bottom;
+
+            const svg = d3.select(svgElement)
+                .attr("width", containerWidth)
+                .attr("height", containerHeight)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            const x = d3.scaleLinear()
+                .domain([d3.min(datosCorrelacion, d => d.gasto) - 200, d3.max(datosCorrelacion, d => d.gasto) + 200])
+                .range([0, width]);
+
+            const y = d3.scaleLinear()
+                .domain([400, 550])
+                .range([height, 0]);
+            
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickFormat(d => `$${d.toFixed(0)}`));
+                
+            svg.append("text")
+                .attr("transform", `translate(${width/2}, ${height + margin.bottom - 10})`)
+                .style("text-anchor", "middle")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("Gasto Público per Cápita (USD)");
+
+            svg.append("g")
+                .call(d3.axisLeft(y).ticks(5));
+
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 15)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("Puntaje Promedio (Estandarizado)");
+                
+            svg.selectAll(".scatter-dot")
+                .data(datosCorrelacion)
+                .enter().append("circle")
+                .attr("class", "scatter-dot")
+                .attr("cx", d => x(d.gasto))
+                .attr("cy", d => y(d.puntaje))
+                .attr("r", d => 6)
+                .attr("fill", d => d.color)
+                .attr("opacity", 0.8)
+                .attr("stroke", "white")
+                .attr("stroke-width", 1.5)
+                .on("mouseover", (event, d) => {
+                    const tooltip = d3.select("#tooltip");
+                    tooltip
+                        .style("opacity", 1)
+                        .html(`
+                            <strong>${d.region}</strong><br>
+                            Gasto: $${d.gasto.toLocaleString()}<br>
+                            Puntaje: ${d.puntaje.toFixed(0)}
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                    
+                    d3.select(event.currentTarget).attr("r", 8).attr("opacity", 1);
+                })
+                .on("mouseout", (event) => {
+                    d3.select("#tooltip").style("opacity", 0);
+                    d3.select(event.currentTarget).attr("r", 6).attr("opacity", 0.8);
+                });
+                
+            const lineData = [
+                { x: 1400, y: 430 },
+                { x: 2800, y: 530 }
+            ];
+            
+            const trendLine = d3.line()
+                .x(d => x(d.x))
+                .y(d => y(d.y));
+
+            svg.append("path")
+                .datum(lineData)
+                .attr("fill", "none")
+                .attr("stroke", "#4b5563")
+                .attr("stroke-width", 2)
+                .attr("stroke-dasharray", "5,5")
+                .attr("d", trendLine);
+                
+
+            window.removeEventListener('resize', window.scatterChartResizeHandler);
+            window.scatterChartResizeHandler = debounce(drawScatterChart, 250);
+            window.addEventListener('resize', window.scatterChartResizeHandler);
+        }
+        
+
+    </script>
+
+</body>
+</html>
